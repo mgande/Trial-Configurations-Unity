@@ -7,12 +7,12 @@ public class subjectParameters : MonoBehaviour {
 
     private InputParams input;
     private StreamWriter outFile;
+    private string filePath;
     private Trial[] trials = new Trial[40];
     private int trialCounter = 0;
-    private int currTrialCounter = 0;
+    private bool firstTrial = true;
     private Trial currTrial;
-    private string filePath;
-    private int speedStepSize = 5;
+    private string columnData = "Subject,Trial,UserHeightView,ManualCalbr,TargetSpeed,SimulateSpeed,Response,SimulatedOrder,Steps,Threshold Speed";
 
     /**
 		Black box implmentation.
@@ -20,8 +20,7 @@ public class subjectParameters : MonoBehaviour {
     **/
 
     // Use this for initialization
-    void Awake () {
-		print ("start called");
+    void Start () {
         filePath = Application.dataPath + "/Scripts";
         string lineJson = "";
         string currLine;
@@ -40,9 +39,8 @@ public class subjectParameters : MonoBehaviour {
 
         string filename = filePath + "/subjectData" + input.current_subject + ".csv";
         outFile = File.CreateText(filename);
+        outFile.WriteLine(columnData);
         setTrials();
-		Debug.Log (trials [0]);
-
     }
 
     private void setTrials()
@@ -50,16 +48,17 @@ public class subjectParameters : MonoBehaviour {
         for (int i = 0; i < 40; i++)
         {
             Trial tmp = new Trial();
-            tmp.speed = i % 2 == 0 ? input.subject_speed_1[input.current_subject + 1] : input.subject_speed_2[input.current_subject + 1];
+            tmp.targetSpeed = i % 2 == 0 ? input.subject_speed_1[input.current_subject + 1] : input.subject_speed_2[input.current_subject + 1];
 
             int group = (int) Mathf.Floor(i / 10);
             if (group == 0 || group == 2)
             {
                 tmp.increasing = false;
-                tmp.startSpeed = tmp.speed + (6 * speedStepSize);
+                tmp.startSpeed = tmp.targetSpeed + (6 * tmp.speedStepSize);
             } else {
-            	tmp.startSpeed = tmp.speed - (6 * speedStepSize);
+            	tmp.startSpeed = tmp.targetSpeed - (6 * tmp.speedStepSize);
             }
+            tmp.currSpeed = tmp.startSpeed;
 
             trials[i] = tmp;
         }
@@ -77,64 +76,71 @@ public class subjectParameters : MonoBehaviour {
 
     private void logCurrTrial()
     {
-        Debug.Log("Speed: " + currTrial.speed);
+        Debug.Log("Target Speed: " + currTrial.targetSpeed);
         Debug.Log("Start Speed: " + currTrial.startSpeed);
         Debug.Log("Increasing? : " + currTrial.increasing);
+        Debug.Log("Last trial speed: " + currTrial.currSpeed);
     }
 
-    /* userInput = -1 : Lower
-    *  userInput = 0 : Equal
-    *  userInput = 1 : Higher
+    /* Given some user data in {-1, 0, 1} = {lower, equal, higher}
+     * @return [startSpeed, currTrialSpeed]
     */
     public int[] getNextTrial(int userInput)
     {
 		//return new int[] { 20, 30 };
-        if (trialCounter == 0 && currTrialCounter == 0) {
+        if (firstTrial) {
+            firstTrial = false;
             currTrial = trials[trialCounter];
-            currTrialCounter++;
-			Debug.Log (trials[0]);
-            // logCurrTrial();
-            return new int[2]{ currTrial.startSpeed, currTrial.speed };
+            return new int[2]{ currTrial.startSpeed, currTrial.targetSpeed };
         }
 
         // logCurrTrial();
-        currTrial.outData += userInput + ",";
+        writeData(userInput);
 
         if ((currTrial.increasing && userInput == 1) || (!currTrial.increasing && userInput == -1)) {
-            writeData();
-
             if (trialCounter == 40) {
                 end();
                 return null;
             }
 
-            currTrial = trials[trialCounter];
             trialCounter++;
-            currTrialCounter = 0;
-            return new int[2] { currTrial.startSpeed, currTrial.speed };
+            currTrial = trials[trialCounter];
+            return new int[2] { currTrial.startSpeed, currTrial.targetSpeed };
         }
 
-        currTrialCounter++;
-
-        if (currTrial.increasing) {
-            return new int[2] { currTrial.startSpeed + ((currTrialCounter - 1) * speedStepSize), currTrial.speed };
-        } else {
-            return new int[2] { currTrial.startSpeed - ((currTrialCounter - 1) * speedStepSize), currTrial.speed };
-        }
-
+        return new int[2] { currTrial.getNextSpeed(), currTrial.targetSpeed };
     }
 
     public void forceQuit()
     {
-        writeData();
+        writeData(2);
         end();
     }
 
-    private void writeData()
+    private string[] userResposne = new string[] { "lower", "exact", "higher", "quit" };
+
+    private void writeData(int userInput)
     {
-        string str = currTrial.speed + ",";
-        str += currTrial.increasing ? "increaseing," : "decreasing,";
-        outFile.WriteLine(str + currTrial.outData);
+        string response = userResposne[userInput + 1];
+        string[] values = new string[] {
+            (input.current_subject + 1).ToString(),
+            trialCounter.ToString() + 1,
+            "N/A",
+            "N/A",
+            currTrial.targetSpeed.ToString(),
+            currTrial.currSpeed.ToString(),
+            response,
+            currTrial.increasing ? "increasing" : "decreasing",
+            currTrial.steps.ToString(),
+            "N/A"
+        };
+
+        string strOut = "";
+        for (int i = 0; i < values.Length; i++)
+        {
+            strOut += values[i] + ",";
+        }
+        outFile.WriteLine(strOut.Substring(0, strOut.Length - 1));
     }
 
     private void end()
@@ -148,26 +154,48 @@ public class subjectParameters : MonoBehaviour {
     }
 
 
-    //private bool once = false;
-	// Update is called once per frame
-	//void Update () {
-    //}
+    private bool once = true;
+	void Update () {
+		if (once) {
+            getNextTrial(0);
+            for (int i = 0; i < 10; i++)
+            {
+                getNextTrial(Random.Range(-1, 2));
+            }
+
+            forceQuit();
+
+			once = false;
+		}		
+    }
 
     private class InputParams
     {
-        public float threshold_min;
-        public float threshold_max;
-        public int current_subject = 0;
+        public int current_subject;
         public int[] subject_speed_1;
         public int[] subject_speed_2;
     }
 
     public class Trial
     {
-        public int speed;
+        public int targetSpeed;
         public int startSpeed;
         public bool increasing = true;
         public float heightOffset;
         public string outData = "";
+        public int speedStepSize = 5;
+        public int steps = 0;
+        public int currSpeed;
+
+        public int getNextSpeed()
+        {
+        	steps++;
+        	if (increasing) {
+        		currSpeed += speedStepSize;
+	        } else {
+	        	currSpeed -= speedStepSize;
+	        }
+	        return currSpeed;
+        }
     }
 }
