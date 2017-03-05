@@ -8,11 +8,12 @@ public class subjectParameters : MonoBehaviour {
     private InputParams input;
     private StreamWriter outFile;
     private string filePath;
-    private Trial[] trials = new Trial[40];
+    private Trial[] trials = new Trial[36];
     private int trialCounter = 0;
     private bool firstTrial = true;
     private Trial currTrial;
     private string columnData = "Subject,Trial,UserHeightView,ManualCalbr,TargetSpeed,SimulateSpeed,Response,SimulatedOrder,Steps,Threshold Speed";
+    private Vector3 manualHeightOffset = new Vector3(0, 0, 0);
 
     /**
 		Black box implmentation.
@@ -45,22 +46,42 @@ public class subjectParameters : MonoBehaviour {
 
     private void setTrials()
     {
-        for (int i = 0; i < 40; i++)
+        int counter = 0;
+        for (int i = 0; i < 3; i++)
         {
-            Trial tmp = new Trial();
-            tmp.targetSpeed = i % 2 == 0 ? input.subject_speed_1[input.current_subject + 1] : input.subject_speed_2[input.current_subject + 1];
-
-            int group = (int) Mathf.Floor(i / 10);
-            if (group == 0 || group == 2)
+            for (int j = 0; j < 2; j++)
             {
-                tmp.increasing = false;
-                tmp.startSpeed = tmp.targetSpeed + (6 * tmp.speedStepSize);
-            } else {
-            	tmp.startSpeed = tmp.targetSpeed - (6 * tmp.speedStepSize);
-            }
-            tmp.currSpeed = tmp.startSpeed;
+                for (int k = 0; k < 2; k++)
+                {
+                    for (int l = 0; l < 3; l++)
+                    {
+                        Trial tmp = new Trial();
+                        tmp.targetSpeed = j % 2 == 0 ? input.subject_speed_1[input.current_subject + 1] : input.subject_speed_2[input.current_subject + 1];
+                        if (k % 2 == 0)
+                        {
+                            tmp.increasing = true;
+                            tmp.startSpeed = tmp.targetSpeed - (6 * tmp.speedStepSize);
+                        } else {
+                            tmp.increasing = false;
+                            tmp.startSpeed = tmp.targetSpeed + (6 * tmp.speedStepSize);
+                        }
 
-            trials[i] = tmp;
+                        if (l % 3 == 0)
+                        {
+                            tmp.heightOffset = -1;
+                        } else if (l % 3 == 1)
+                        {
+                            tmp.heightOffset = 0;
+                        } else
+                        {
+                            tmp.heightOffset = 1;
+                        }
+
+                        trials[counter] = tmp;
+                        counter++;
+                    }
+                }
+            }
         }
 
         // Fisher-Yates Shuffle
@@ -71,7 +92,6 @@ public class subjectParameters : MonoBehaviour {
             trials[i] = trials[r];
             trials[r] = tmp;
         }
-
     }
 
     private void logCurrTrial()
@@ -80,6 +100,11 @@ public class subjectParameters : MonoBehaviour {
         Debug.Log("Start Speed: " + currTrial.startSpeed);
         Debug.Log("Increasing? : " + currTrial.increasing);
         Debug.Log("Last trial speed: " + currTrial.currSpeed);
+    }
+
+    public void setManualHeightOffset(Vector3 vec)
+    {
+        manualHeightOffset = vec;
     }
 
     /* Given some user data in {-1, 0, 1} = {lower, equal, higher}
@@ -105,10 +130,10 @@ public class subjectParameters : MonoBehaviour {
 
             trialCounter++;
             currTrial = trials[trialCounter];
-            return new int[2] { currTrial.startSpeed, currTrial.targetSpeed };
+            return new int[3] { currTrial.startSpeed, currTrial.targetSpeed, currTrial.heightOffset };
         }
 
-        return new int[2] { currTrial.getNextSpeed(), currTrial.targetSpeed };
+        return new int[3] { currTrial.getNextSpeed(), currTrial.targetSpeed, currTrial.heightOffset };
     }
 
     public void forceQuit()
@@ -117,22 +142,21 @@ public class subjectParameters : MonoBehaviour {
         end();
     }
 
-    private string[] userResposne = new string[] { "lower", "exact", "higher", "quit" };
+    private string[] userResponse = new string[] { "lower", "exact", "higher", "quit" };
 
     private void writeData(int userInput)
     {
-        string response = userResposne[userInput + 1];
+        string response = userResponse[userInput + 1];
         string[] values = new string[] {
             (input.current_subject + 1).ToString(),
             trialCounter.ToString() + 1,
-            "N/A",
-            "N/A",
+            userResponse[currTrial.heightOffset + 1],
+            manualHeightOffset.ToString(),
             currTrial.targetSpeed.ToString(),
             currTrial.currSpeed.ToString(),
             response,
             currTrial.increasing ? "increasing" : "decreasing",
-            currTrial.steps.ToString(),
-            "N/A"
+            currTrial.steps.ToString()
         };
 
         string strOut = "";
@@ -181,7 +205,7 @@ public class subjectParameters : MonoBehaviour {
         public int targetSpeed;
         public int startSpeed;
         public bool increasing = true;
-        public float heightOffset;
+        public int heightOffset;
         public string outData = "";
         public int speedStepSize = 5;
         public int steps = 0;
