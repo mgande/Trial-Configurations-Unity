@@ -65,6 +65,8 @@ public class subjectParameters : MonoBehaviour {
                             tmp.increasing = false;
                             tmp.startSpeed = tmp.targetSpeed + (6 * tmp.speedStepSize);
                         }
+			    
+			tmp.currSpeed = tmp.startSpeed;
 
                         if (l % 3 == 0)
                         {
