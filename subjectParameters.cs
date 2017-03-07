@@ -2,23 +2,24 @@
 using System.IO;
 using System.Text;
 using System.Collections;
+using System;
 
 public class subjectParameters : MonoBehaviour {
 
     private InputParams input;
     private StreamWriter outFile;
     private string filePath;
-    private Trial[] trials = new Trial[36];
-    private int trialCounter = 0;
-    private bool firstTrial = true;
-    private Trial currTrial;
-    private string columnData = "Subject,Trial,UserHeightView,ManualCalbr,TargetSpeed,SimulateSpeed,Response,SimulatedOrder,Steps,Threshold Speed";
-    private Vector3 manualHeightOffset = new Vector3(0, 0, 0);
 
-    /**
-		Black box implmentation.
-		Main thread asks for currect speed and gives response (-1, 0, 1).
-    **/
+    private Trial[] trials;
+    private int trialCounter = 0;
+    private Trial currTrial = null;
+    private Vector3 manualHeightOffset = new Vector3(0, 0, 0);
+    private string columnData = "Subject,Trial,UserHeightView,ManualCalbr,TargetSpeed,SimulateSpeed,Response,SimulatedOrder,Steps,Threshold Speed";
+
+    //Parameters that can be tuned
+    private static int TRIALS_IN_BLOCKS = 40;
+    private static int STEPS_FROM_TARGET = 4;
+    private static int SPEED_STEP_SIZE = 5;
 
     // Use this for initialization
     void Start () {
@@ -46,54 +47,81 @@ public class subjectParameters : MonoBehaviour {
 
     private void setTrials()
     {
-        int counter = 0;
+        trials = new Trial[TRIALS_IN_BLOCKS * 3];
+
+        Subject subject = input.getCurrentSubject();
+        if (subject == null)
+        {
+            return;
+        }
+
+        //blocks
         for (int i = 0; i < 3; i++)
         {
-            for (int j = 0; j < 2; j++)
+            int heightOffset = subject.heights[i];
+
+            Trial[] currBlock = new Trial[TRIALS_IN_BLOCKS];
+            int counter = 0;
+            for (int j = 0; j < (TRIALS_IN_BLOCKS / 4); j++)
             {
                 for (int k = 0; k < 2; k++)
                 {
-                    for (int l = 0; l < 3; l++)
+                    for (int l = 0; l < 2; l++)
                     {
                         Trial tmp = new Trial();
-                        tmp.targetSpeed = j % 2 == 0 ? input.subject_speed_1[input.current_subject + 1] : input.subject_speed_2[input.current_subject + 1];
-                        if (k % 2 == 0)
+                        tmp.targetSpeed = subject.speeds[k];
+                        tmp.heightOffset = subject.heights[i];
+                        tmp.currSpeed = tmp.startSpeed;
+
+                        if (l == 0)
                         {
                             tmp.increasing = true;
-                            tmp.startSpeed = tmp.targetSpeed - (6 * tmp.speedStepSize);
-                        } else {
+                            tmp.startSpeed = tmp.targetSpeed - (STEPS_FROM_TARGET * SPEED_STEP_SIZE);
+                        }
+                        else
+                        {
                             tmp.increasing = false;
-                            tmp.startSpeed = tmp.targetSpeed + (6 * tmp.speedStepSize);
-                        }
-			    
-			tmp.currSpeed = tmp.startSpeed;
-
-                        if (l % 3 == 0)
-                        {
-                            tmp.heightOffset = -1;
-                        } else if (l % 3 == 1)
-                        {
-                            tmp.heightOffset = 0;
-                        } else
-                        {
-                            tmp.heightOffset = 1;
+                            tmp.startSpeed = tmp.targetSpeed + (STEPS_FROM_TARGET * SPEED_STEP_SIZE);
                         }
 
-                        trials[counter] = tmp;
+                        currBlock[counter] = tmp;
                         counter++;
                     }
                 }
             }
-        }
 
-        // Fisher-Yates Shuffle
+            currBlock = randomizeTrials(currBlock);
+            trials = appendToTrials(trials, currBlock);
+        }
+    }
+
+    private Trial[] randomizeTrials(Trial[] trials)
+    {
         for (int i = (trials.Length - 1); i > 0; i--)
         {
-            int r = Random.Range(0, i);
+            int r = UnityEngine.Random.Range(0, i);
             Trial tmp = trials[i];
             trials[i] = trials[r];
             trials[r] = tmp;
         }
+
+        return trials;
+    }
+
+    private Trial[] appendToTrials(Trial[] trials1, Trial[] trials2)
+    {
+        int counter = 0;
+        while (trials1[counter] != null)
+        {
+            counter++;
+        }
+
+        for (int i = 0; i < trials2.Length; i++)
+        {
+            trials1[counter + i] = trials2[i];
+        }
+
+        return trials1;
     }
 
     private void logCurrTrial()
@@ -115,17 +143,15 @@ public class subjectParameters : MonoBehaviour {
     public int[] getNextTrial(int userInput)
     {
 		//return new int[] { 20, 30 };
-        if (firstTrial) {
-            firstTrial = false;
+        if (currTrial == null) {
             currTrial = trials[trialCounter];
-            return new int[2]{ currTrial.startSpeed, currTrial.targetSpeed };
+            return new int[3] { currTrial.startSpeed, currTrial.targetSpeed, currTrial.heightOffset };
         }
 
-        // logCurrTrial();
         writeData(userInput);
 
         if ((currTrial.increasing && userInput == 1) || (!currTrial.increasing && userInput == -1)) {
-            if (trialCounter == 40) {
+            if (trialCounter == (TRIALS_IN_BLOCKS * 3)) {
                 end();
                 return null;
             }
@@ -179,36 +205,12 @@ public class subjectParameters : MonoBehaviour {
         jsonOut.Close();
     }
 
-
-    private bool once = true;
-	void Update () {
-		if (once) {
-            getNextTrial(0);
-            for (int i = 0; i < 10; i++)
-            {
-                getNextTrial(Random.Range(-1, 2));
-            }
-
-            forceQuit();
-
-			once = false;
-		}		
-    }
-
-    private class InputParams
-    {
-        public int current_subject;
-        public int[] subject_speed_1;
-        public int[] subject_speed_2;
-    }
-
     public class Trial
     {
         public int targetSpeed;
         public int startSpeed;
-        public bool increasing = true;
+        public bool increasing;
         public int heightOffset;
-        public string outData = "";
         public int speedStepSize = 5;
         public int steps = 0;
         public int currSpeed;
@@ -222,6 +224,29 @@ public class subjectParameters : MonoBehaviour {
 	        	currSpeed -= speedStepSize;
 	        }
 	        return currSpeed;
+        }
+    }
+
+    [Serializable]
+    public class Subject
+    {
+        public int[] speeds;
+        public int[] heights;
+    }
+
+    [Serializable]
+    public class InputParams
+    {
+        public int current_subject;
+        public Subject[] subjects;
+
+        public Subject getCurrentSubject()
+        {
+            if (subjects == null)
+            {
+                return null;
+            }
+            return subjects[current_subject % (subjects.Length)];
         }
     }
 }
