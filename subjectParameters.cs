@@ -71,7 +71,6 @@ public class subjectParameters : MonoBehaviour {
                         Trial tmp = new Trial();
                         tmp.targetSpeed = subject.speeds[k];
                         tmp.heightOffset = subject.heights[i];
-                        tmp.currSpeed = tmp.startSpeed;
 
                         if (l == 0)
                         {
@@ -83,6 +82,7 @@ public class subjectParameters : MonoBehaviour {
                             tmp.increasing = false;
                             tmp.startSpeed = tmp.targetSpeed + (STEPS_FROM_TARGET * SPEED_STEP_SIZE);
                         }
+			tmp.currSpeed = tmp.startSpeed;
 
                         currBlock[counter] = tmp;
                         counter++;
