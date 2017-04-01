@@ -15,11 +15,12 @@ public class subjectParameters : MonoBehaviour {
     private Trial currTrial = null;
     private Vector3 manualHeightOffset = new Vector3(0, 0, 0);
     private string columnData = "Subject,Trial,UserHeightView,ManualCalbr,TargetSpeed,SimulateSpeed,Response,SimulatedOrder,Steps,Threshold Speed";
+    private Block[] blocks = new Block[3] { new Block(), new Block(), new Block() };
+    private int blockCounter = 0;
 
     //Parameters that can be tuned
-    private static int TRIALS_IN_BLOCKS = 40;
-    private static int STEPS_FROM_TARGET = 4;
-    private static int SPEED_STEP_SIZE = 5;
+    private static int TRIALS_IN_BLOCKS = 20;
+    private static int INITIAL_THRESHOLD = 4;
 
     // Use this for initialization
     void Start () {
@@ -47,87 +48,34 @@ public class subjectParameters : MonoBehaviour {
 
     private void setTrials()
     {
-        trials = new Trial[TRIALS_IN_BLOCKS * 3];
-
         Subject subject = input.getCurrentSubject();
         if (subject == null)
         {
             return;
         }
 
+        trials = new Trial[TRIALS_IN_BLOCKS * 3];
+        int counter = 0;
+
         //blocks
         for (int i = 0; i < 3; i++)
         {
-            int heightOffset = subject.heights[i];
-
-            Trial[] currBlock = new Trial[TRIALS_IN_BLOCKS];
-            int counter = 0;
-            for (int j = 0; j < (TRIALS_IN_BLOCKS / 4); j++)
+            for (int j = 0; j < (TRIALS_IN_BLOCKS); j++)
             {
-                for (int k = 0; k < 2; k++)
-                {
-                    for (int l = 0; l < 2; l++)
-                    {
-                        Trial tmp = new Trial();
-                        tmp.targetSpeed = subject.speeds[k];
-                        tmp.heightOffset = subject.heights[i];
-
-                        if (l == 0)
-                        {
-                            tmp.increasing = true;
-                            tmp.startSpeed = tmp.targetSpeed - (STEPS_FROM_TARGET * SPEED_STEP_SIZE);
-                        }
-                        else
-                        {
-                            tmp.increasing = false;
-                            tmp.startSpeed = tmp.targetSpeed + (STEPS_FROM_TARGET * SPEED_STEP_SIZE);
-                        }
-			tmp.currSpeed = tmp.startSpeed;
-
-                        currBlock[counter] = tmp;
-                        counter++;
-                    }
-                }
+                Trial tmp = new Trial();
+                tmp.targetSpeed = j < (TRIALS_IN_BLOCKS / 2) ? subject.speeds[0] : subject.speeds[1];
+                tmp.heightOffset = subject.heights[i];
+                tmp.increasing = (j % 2) == 0 ? true : false;
+                trials[counter] = tmp;
+                counter++;
             }
-
-            currBlock = randomizeTrials(currBlock);
-            trials = appendToTrials(trials, currBlock);
         }
-    }
-
-    private Trial[] randomizeTrials(Trial[] trials)
-    {
-        for (int i = (trials.Length - 1); i > 0; i--)
-        {
-            int r = UnityEngine.Random.Range(0, i);
-            Trial tmp = trials[i];
-            trials[i] = trials[r];
-            trials[r] = tmp;
-        }
-
-        return trials;
-    }
-
-    private Trial[] appendToTrials(Trial[] trials1, Trial[] trials2)
-    {
-        int counter = 0;
-        while (trials1[counter] != null)
-        {
-            counter++;
-        }
-
-        for (int i = 0; i < trials2.Length; i++)
-        {
-            trials1[counter + i] = trials2[i];
-        }
-
-        return trials1;
     }
 
     private void logCurrTrial()
     {
         Debug.Log("Target Speed: " + currTrial.targetSpeed);
-        Debug.Log("Start Speed: " + currTrial.startSpeed);
+        Debug.Log("Current Speed: " + currTrial.speedStepSize);
         Debug.Log("Increasing? : " + currTrial.increasing);
         Debug.Log("Last trial speed: " + currTrial.currSpeed);
     }
@@ -138,27 +86,38 @@ public class subjectParameters : MonoBehaviour {
     }
 
     /* Given some user data in {-1, 0, 1} = {lower, equal, higher}
-     * @return [startSpeed, currTrialSpeed]
+     * @return [currSpeed, targetSpeed, heightOffset]
     */
     public int[] getNextTrial(int userInput)
     {
-		//return new int[] { 20, 30 };
         if (currTrial == null) {
             currTrial = trials[trialCounter];
-            return new int[3] { currTrial.startSpeed, currTrial.targetSpeed, currTrial.heightOffset };
+            currTrial.init(blocks[blockCounter].threshold, trialCounter);
+            return new int[3] { currTrial.currSpeed, currTrial.targetSpeed, currTrial.heightOffset };
         }
 
         writeData(userInput);
 
         if ((currTrial.increasing && userInput == 1) || (!currTrial.increasing && userInput == -1)) {
+            blocks[blockCounter].updateThreshold(Math.Abs(currTrial.stepsFromTarget));
+
             if (trialCounter == (TRIALS_IN_BLOCKS * 3)) {
                 end();
                 return null;
             }
 
             trialCounter++;
+            if (trialCounter >= TRIALS_IN_BLOCKS)
+            {
+                blockCounter = 1;
+            } else if (trialCounter >= (TRIALS_IN_BLOCKS * 2))
+            {
+                blockCounter = 2;
+            }
+
             currTrial = trials[trialCounter];
-            return new int[3] { currTrial.startSpeed, currTrial.targetSpeed, currTrial.heightOffset };
+            currTrial.init(blocks[blockCounter].threshold, trialCounter);
+            return new int[3] { currTrial.currSpeed, currTrial.targetSpeed, currTrial.heightOffset };
         }
 
         return new int[3] { currTrial.getNextSpeed(), currTrial.targetSpeed, currTrial.heightOffset };
@@ -208,22 +167,60 @@ public class subjectParameters : MonoBehaviour {
     public class Trial
     {
         public int targetSpeed;
-        public int startSpeed;
         public bool increasing;
         public int heightOffset;
         public int speedStepSize = 5;
+        public int stepsFromTarget;
         public int steps = 0;
         public int currSpeed;
 
+        public void init(int threshold, int trialCounter)
+        {
+            if (trialCounter % TRIALS_IN_BLOCKS < 2)
+            {
+                stepsFromTarget = increasing ? -INITIAL_THRESHOLD : INITIAL_THRESHOLD;
+            }
+            else
+            {
+                System.Random rnd = new System.Random();
+                int initThreshold = rnd.Next(2, 5) + threshold;
+                initThreshold = initThreshold > 4 ? 4 + rnd.Next(-1, 2) : initThreshold;
+                stepsFromTarget = increasing ? -initThreshold : initThreshold;
+            }
+            currSpeed = targetSpeed + (stepsFromTarget * speedStepSize);
+        }
+
         public int getNextSpeed()
         {
-        	steps++;
+            steps++;
         	if (increasing) {
-        		currSpeed += speedStepSize;
-	        } else {
-	        	currSpeed -= speedStepSize;
+                stepsFromTarget++;
+                currSpeed += speedStepSize;
+	        } else
+            {
+                stepsFromTarget--;
+                currSpeed -= speedStepSize;
 	        }
 	        return currSpeed;
+        }
+    }
+
+    public class Block
+    {
+        public int threshold = 0;
+        private int[] values = new int[20];
+        private int count = 0;
+
+        public void updateThreshold(int thresold) {
+            values[count] = threshold;
+            count++;
+
+            int sum = 0;
+            for (int i = 0; i < count; i++)
+            {
+                sum += values[i];
+            }
+            threshold = sum / count;
         }
     }
 
