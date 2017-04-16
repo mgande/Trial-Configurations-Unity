@@ -183,7 +183,7 @@ public class subjectParameters : MonoBehaviour {
             else
             {
                 System.Random rnd = new System.Random();
-                int initThreshold = rnd.Next(2, 5) + threshold;
+                int initThreshold = rnd.Next(3, 5) + threshold;
                 initThreshold = initThreshold > 4 ? 4 + rnd.Next(-1, 2) : initThreshold;
                 stepsFromTarget = increasing ? -initThreshold : initThreshold;
             }
