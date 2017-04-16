@@ -19,7 +19,7 @@ public class subjectParameters : MonoBehaviour {
     private int blockCounter = 0;
 
     //Parameters that can be tuned
-    private static int TRIALS_IN_BLOCKS = 20;
+    private static int TRIALS_IN_BLOCKS = 10;
     private static int INITIAL_THRESHOLD = 4;
 
     // Use this for initialization
