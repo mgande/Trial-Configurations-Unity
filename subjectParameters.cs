@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.IO;
 using System.Text;
 using System.Collections;
@@ -14,7 +14,7 @@ public class subjectParameters : MonoBehaviour {
     private int trialCounter = 0;
     private Trial currTrial = null;
     private Vector3 manualHeightOffset = new Vector3(0, 0, 0);
-    private string columnData = "Subject,Trial,UserHeightView,ManualCalbr,TargetSpeed,SimulateSpeed,Response,SimulatedOrder,Steps,Threshold Speed";
+    private string columnData = "Subject,Trial,UserHeightView,ManualX,ManualY,ManualZ,TargetSpeed,SimulateSpeed,Response,SimulatedOrder,Steps,Threshold Speed";
     private Block[] blocks = new Block[3] { new Block(), new Block(), new Block() };
     private int blockCounter = 0;
 
@@ -70,6 +70,21 @@ public class subjectParameters : MonoBehaviour {
                 counter++;
             }
         }
+
+        Debug.Log(trials.Length);
+        int iCounter = 0;
+        int dCounter = 0;
+        for (int i = 0; i < trials.Length; i++)
+        {
+           if (trials[i].increasing)
+            {
+                iCounter++;
+            } else
+            {
+                dCounter++;
+            }
+        }
+        Debug.Log(iCounter + " " + dCounter);
     }
 
     private void logCurrTrial()
@@ -138,7 +153,9 @@ public class subjectParameters : MonoBehaviour {
             (input.current_subject + 1).ToString(),
             trialCounter.ToString() + 1,
             userResponse[currTrial.heightOffset + 1],
-            manualHeightOffset.ToString(),
+            manualHeightOffset[0].ToString(),
+            manualHeightOffset[1].ToString(),
+            manualHeightOffset[2].ToString(),
             currTrial.targetSpeed.ToString(),
             currTrial.currSpeed.ToString(),
             response,
